@@ -79,7 +79,7 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
   const quantityNum = typeof quantity === "string" ? parseInt(quantity, 10) || 0 : quantity;
   const deliveryCostNum = typeof deliveryCost === "string" ? parseFloat(deliveryCost) || 0 : deliveryCost;
   const subtotal = salePriceNum * quantityNum;
-  const total = subtotal + deliveryCostNum;
+  const total = subtotal - deliveryCostNum;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +106,6 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
             quantity: quantityNum,
             salePrice: salePriceNum,
             deliveryCost: deliveryCostNum,
-
             status,
 
           });

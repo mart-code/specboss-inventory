@@ -117,43 +117,43 @@ export default function OrderDetailPage() {
             <dl className="space-y-2">
               <div className="flex justify-between">
                 <dt className="text-gray-600">Product</dt>
-                <dd>{product?.name || order.productId}</dd>
+                <dd className="text-gray-600">{product?.name || order.productId}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">State</dt>
-                <dd>{state?.name || order.stateId}</dd>
+                <dd className="text-gray-600">{state?.name || order.stateId}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Delivery Company</dt>
-                <dd>{company?.name || order.deliveryCompanyId}</dd>
+                <dd className="text-gray-600">{company?.name || order.deliveryCompanyId}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Quantity</dt>
-                <dd>{order.quantity}</dd>
+                <dd className="text-gray-600">{order.quantity}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Sale Price</dt>
-                <dd>{formatCurrency(order.salePrice)}</dd>
+                <dd className="text-gray-600">{formatCurrency(order.salePrice)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Subtotal</dt>
-                <dd>{formatCurrency(order.subtotal)}</dd>
+                <dd className="text-gray-600">{formatCurrency(order.subtotal)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Delivery Cost</dt>
-                <dd>{formatCurrency(order.deliveryCost)}</dd>
+                <dd className="text-gray-600">{formatCurrency(order.deliveryCost)}</dd>
               </div>
               <div className="flex justify-between border-t pt-2">
                 <dt className="text-gray-600 font-medium">Total</dt>
-                <dd className="font-bold">{formatCurrency(order.total)}</dd>
+                <dd className="font-bold text-gray-600">{formatCurrency(order.total)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Order Date</dt>
-                <dd>{formatDate(order.orderDate)}</dd>
+                <dd className="text-gray-600">{formatDate(order.orderDate)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-600">Created</dt>
-                <dd>{formatDate(order.createdAt)}</dd>
+                <dd className="text-gray-600">{formatDate(order.createdAt)}</dd>
               </div>
             </dl>
           </div>
@@ -181,7 +181,7 @@ export default function OrderDetailPage() {
                 value={order.status}
                 onChange={(e) => handleStatusChange(e.target.value as OrderStatus)}
                 disabled={statusChanging}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full px-3 py-2 border text-gray-600 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 <option value="pending">Pending</option>
                 <option value="successful">Successful</option>

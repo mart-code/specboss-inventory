@@ -74,7 +74,7 @@ export async function createOrder(data: CreateOrderData): Promise<Order> {
   const now = Date.now();
   const orderNumber = await generateOrderNumber();
   const subtotal = data.salePrice * data.quantity;
-  const total = subtotal + data.deliveryCost;
+  const total = subtotal - data.deliveryCost;
 
   const orderData: Omit<Order, "id"> = {
     orderNumber,
