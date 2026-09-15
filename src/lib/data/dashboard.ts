@@ -29,22 +29,23 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const yearStart = startOfYear(now).getTime();
 
   const successfulOrders = orders.filter((o) => o.status === "successful");
+  console.log(successfulOrders)
 
   const todayRevenue = successfulOrders
     .filter((o) => o.orderDate >= todayStart)
-    .reduce((sum, o) => sum + o.subtotal, 0);
+    .reduce((sum, o) => sum + o.total, 0);
 
   const weekRevenue = successfulOrders
     .filter((o) => o.orderDate >= weekStart)
-    .reduce((sum, o) => sum + o.subtotal, 0);
+    .reduce((sum, o) => sum + o.total, 0);
 
   const monthRevenue = successfulOrders
     .filter((o) => o.orderDate >= monthStart)
-    .reduce((sum, o) => sum + o.subtotal, 0);
+    .reduce((sum, o) => sum + o.total, 0);
 
   const yearRevenue = successfulOrders
     .filter((o) => o.orderDate >= yearStart)
-    .reduce((sum, o) => sum + o.subtotal, 0);
+    .reduce((sum, o) => sum + o.total, 0);
 
   const unitsSold = successfulOrders.reduce((sum, o) => sum + o.quantity, 0);
 

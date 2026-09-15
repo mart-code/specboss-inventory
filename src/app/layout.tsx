@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SpecBoss Inventory",
-  description: "SpecBoss Simple Inventory Management",
+  title: "",
+  description: "",
 };
 
 export const dynamic = "force-dynamic";

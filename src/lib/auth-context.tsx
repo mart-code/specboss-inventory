@@ -6,13 +6,15 @@ import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { UserProfile } from "@/lib/types";
 
+
+//Add auth expected values
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
-
+// Create the AuthContext with default values
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
@@ -20,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
+// Create a custom hook to use the AuthContext
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -27,7 +30,7 @@ export const useAuth = () => {
   }
   return context;
 };
-
+// Function to fetch user profile
 async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<UserProfile | null> {
   try {
     const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));

@@ -35,7 +35,7 @@ export async function getReportData(orders: Order[], period: "daily" | "weekly" 
   const successful = orders.filter((o) => o.status === "successful" && o.orderDate >= start);
 
   return {
-    revenue: successful.reduce((sum, o) => sum + o.subtotal, 0),
+    revenue: successful.reduce((sum, o) => sum + o.total, 0),
     orders: successful.length,
     unitsSold: successful.reduce((sum, o) => sum + o.quantity, 0),
   };
@@ -67,7 +67,7 @@ export function getChartData(orders: Order[], period: "daily" | "weekly" | "mont
 
   successful.forEach((order) => {
     const dateKey = new Date(order.orderDate).toISOString().split("T")[0];
-    dailyMap.set(dateKey, (dailyMap.get(dateKey) || 0) + order.subtotal);
+    dailyMap.set(dateKey, (dailyMap.get(dateKey) || 0) + order.total);
   });
 
   return Array.from(dailyMap.entries())
@@ -93,7 +93,7 @@ export async function getSalesByState(orders: Order[], stateNames: Map<string, s
     map.set(key, {
       orders: existing.orders + 1,
       units: existing.units + order.quantity,
-      revenue: existing.revenue + order.subtotal,
+      revenue: existing.revenue + order.total,
     });
   });
 
@@ -126,7 +126,7 @@ export async function getSalesByCompany(orders: Order[], companyNames: Map<strin
     map.set(key, {
       orders: existing.orders + 1,
       units: existing.units + order.quantity,
-      revenue: existing.revenue + order.subtotal,
+      revenue: existing.revenue + order.total,
     });
   });
 
