@@ -31,9 +31,8 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
   const [quantity, setQuantity] = useState(order ? String(order.quantity) : "");
   const [salePrice, setSalePrice] = useState(order ? String(order.salePrice) : "");
   const [deliveryCost, setDeliveryCost] = useState(order ? String(order.deliveryCost) : "");
-  // const [customerName, setCustomerName] = useState(order?.customerName || "");
-  // const [customerPhone, setCustomerPhone] = useState(order?.customerPhone || "");
-  // const [customerAddress, setCustomerAddress] = useState(order?.customerAddress || "");
+  const [orderDate, setOrderDate] = useState(order ? new Date(order.orderDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+  const [cancellationReason, setCancellationReason] = useState(order?.cancellationReason || "");
   const [status, setStatus] = useState<OrderStatus>(order?.status || "pending");
 
   const [availableStock, setAvailableStock] = useState<number | null>(null);
@@ -78,6 +77,7 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
   const salePriceNum = typeof salePrice === "string" ? parseFloat(salePrice) || 0 : salePrice;
   const quantityNum = typeof quantity === "string" ? parseInt(quantity, 10) || 0 : quantity;
   const deliveryCostNum = typeof deliveryCost === "string" ? parseFloat(deliveryCost) || 0 : deliveryCost;
+  const orderDateNum = new Date(orderDate).getTime();
   const subtotal = salePriceNum * quantityNum;
   const total = subtotal - deliveryCostNum;
 
@@ -91,8 +91,8 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
       showToast("Quantity must be greater than 0", "error");
       return;
     }
-    if (status === "successful" && availableStock !== null && quantityNum > availableStock) {
-      showToast(`Cannot create successful order: only ${availableStock} in stock`, "error");
+    if ((status === "successful" || status === "pending") && availableStock !== null && quantityNum > availableStock) {
+      showToast(`Cannot create order: only ${availableStock} in stock`, "error");
       return;
     }
 
@@ -100,26 +100,29 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
     try {
       if (isEditing && order) {
         await updateOrder(order.id, {
-            productId: selectedProduct,
-            stateId: selectedState,
-            deliveryCompanyId: selectedCompany,
-            quantity: quantityNum,
-            salePrice: salePriceNum,
-            deliveryCost: deliveryCostNum,
-            status,
-
-          });
-         showToast("Order updated successfully", "success");
-       } else {
+          productId: selectedProduct,
+          stateId: selectedState,
+          deliveryCompanyId: selectedCompany,
+          quantity: quantityNum,
+          salePrice: salePriceNum,
+          deliveryCost: deliveryCostNum,
+          status,
+          orderDate: orderDateNum,
+          cancellationReason: status === "cancelled" ? cancellationReason : undefined,
+        });
+        showToast("Order updated successfully", "success");
+      } else {
         await createOrder({
-            productId: selectedProduct,
-            stateId: selectedState,
-            deliveryCompanyId: selectedCompany,
-            quantity: quantityNum,
-            salePrice: salePriceNum,
-            deliveryCost: deliveryCostNum,
-            status,
-          });
+          productId: selectedProduct,
+          stateId: selectedState,
+          deliveryCompanyId: selectedCompany,
+          quantity: quantityNum,
+          salePrice: salePriceNum,
+          deliveryCost: deliveryCostNum,
+          status,
+          orderDate: orderDateNum,
+          cancellationReason: status === "cancelled" ? cancellationReason : undefined,
+        });
         showToast("Order created successfully", "success");
       }
       onSuccess();
@@ -254,6 +257,17 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
             className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Order Date</label>
+          <input
+            type="date"
+            value={orderDate}
+            onChange={(e) => setOrderDate(e.target.value)}
+            required
+            className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
       </div>
 
       <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -284,6 +298,19 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
           <option value="cancelled">Cancelled</option>
         </select>
       </div>
+
+      {status === "cancelled" && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cancellation Reason</label>
+          <textarea
+            value={cancellationReason}
+            onChange={(e) => setCancellationReason(e.target.value)}
+            required
+            rows={3}
+            className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
 
       <div className="flex gap-3 pt-2">
         <button

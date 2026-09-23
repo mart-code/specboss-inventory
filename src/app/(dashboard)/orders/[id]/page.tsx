@@ -21,6 +21,8 @@ export default function OrderDetailPage() {
   const [state, setState] = useState<State | null>(null);
   const [company, setCompany] = useState<DeliveryCompany | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedStatus, setSelectedStatus] = useState<OrderStatus>("pending");
+  const [cancelReason, setCancelReason] = useState("");
   const [statusChanging, setStatusChanging] = useState(false);
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function OrderDetailPage() {
         const orderData = await getOrder(orderId);
         if (!orderData) return;
         setOrder(orderData);
+        setSelectedStatus(orderData.status);
+        setCancelReason(orderData.cancellationReason || "");
 
         const [productData, stateData, companyData] = await Promise.all([
           getProduct(orderData.productId),
@@ -50,27 +54,37 @@ export default function OrderDetailPage() {
     loadOrder();
   }, [orderId]);
 
-  const handleStatusChange = async (newStatus: OrderStatus) => {
-    if (!order || order.status === newStatus) return;
+  const handleSaveStatus = async () => {
+    if (!order || order.status === selectedStatus) return;
 
-    if (order.status === "successful" && newStatus !== "successful") {
+    if (order.status === "successful" && selectedStatus !== "successful") {
       const confirmed = window.confirm(
-        `Changing status from Successful to ${newStatus} will restore ${order.quantity} units to inventory. Continue?`
+        `Changing status from Successful to ${selectedStatus} will restore ${order.quantity} units to inventory. Continue?`
       );
       if (!confirmed) return;
     }
-    if (order.status !== "successful" && newStatus === "successful") {
+    if (order.status !== "successful" && selectedStatus === "successful") {
       const confirmed = window.confirm(
         `Changing status to Successful will deduct ${order.quantity} units from inventory. Continue?`
       );
       if (!confirmed) return;
     }
+    if (selectedStatus === "cancelled" && !cancelReason.trim()) {
+      showToast("Please provide a cancellation reason", "error");
+      return;
+    }
 
     setStatusChanging(true);
     try {
-      await updateOrderStatus(orderId, newStatus);
+      await updateOrderStatus(
+        orderId,
+        selectedStatus,
+        selectedStatus === "cancelled" ? cancelReason : undefined
+      );
       const updated = await getOrder(orderId);
       setOrder(updated);
+      setSelectedStatus(updated?.status || selectedStatus);
+      setCancelReason(updated?.cancellationReason || "");
       showToast("Order status updated", "success");
     } catch (error: unknown) {
       showToast(error instanceof Error ? error.message : "Failed to update status", "error");
@@ -151,6 +165,12 @@ export default function OrderDetailPage() {
                 <dt className="text-gray-600">Order Date</dt>
                 <dd className="text-gray-600">{formatDate(order.orderDate)}</dd>
               </div>
+              {order.cancellationReason && (
+                <div className="flex justify-between">
+                  <dt className="text-gray-600">Cancellation Reason</dt>
+                  <dd className="text-gray-600">{order.cancellationReason}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-gray-600">Created</dt>
                 <dd className="text-gray-600">{formatDate(order.createdAt)}</dd>
@@ -178,8 +198,8 @@ export default function OrderDetailPage() {
             <div className="mt-6">
               <h2 className="text-sm font-medium text-gray-500 mb-2">Change Status</h2>
               <select
-                value={order.status}
-                onChange={(e) => handleStatusChange(e.target.value as OrderStatus)}
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as OrderStatus)}
                 disabled={statusChanging}
                 className="w-full px-3 py-2 border text-gray-600 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
@@ -187,6 +207,27 @@ export default function OrderDetailPage() {
                 <option value="successful">Successful</option>
                 <option value="cancelled">Cancelled</option>
               </select>
+
+              {selectedStatus === "cancelled" && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cancellation Reason</label>
+                  <textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveStatus}
+                disabled={statusChanging || order.status === selectedStatus}
+                className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {statusChanging ? "Saving..." : "Save Status"}
+              </button>
             </div>
           </div>
         </div>

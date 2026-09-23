@@ -2,20 +2,25 @@
 
 import { useState, useEffect } from "react";
 import { Inventory, Product, State, DeliveryCompany } from "@/lib/types";
-import { getInventory, getInventoryWithFilters } from "@/lib/data/inventory";
+import { getInventory, getInventoryWithFilters, updateStock } from "@/lib/data/inventory";
 import { getProducts } from "@/lib/data/products";
 import { getStates } from "@/lib/data/states";
 import { getDeliveryCompanies } from "@/lib/data/delivery-companies";
 import { AddStockForm } from "@/components/add-stock-form";
+import { useToast } from "@/components/ui/toast-context";
 import { LOW_STOCK_THRESHOLD, formatDate } from "@/lib/utils";
 
 export default function InventoryPage() {
+  const { showToast } = useToast();
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [states, setStates] = useState<State[]>([]);
   const [companies, setCompanies] = useState<DeliveryCompany[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showAddStock, setShowAddStock] = useState(false);
+  const [editingItem, setEditingItem] = useState<Inventory | null>(null);
+  const [editQuantity, setEditQuantity] = useState("");
   const [filters, setFilters] = useState<{
     productId: string;
     stateId: string;
@@ -72,6 +77,32 @@ export default function InventoryPage() {
     loadData();
   };
 
+  const handleEdit = (item: Inventory) => {
+    setEditingItem(item);
+    setEditQuantity(String(item.quantity));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+    const qty = parseInt(editQuantity, 10);
+    if (isNaN(qty) || qty < 0) {
+      showToast("Quantity must be 0 or greater", "error");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await updateStock(editingItem.id, qty);
+      showToast("Inventory updated successfully", "success");
+      setEditingItem(null);
+      loadData();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to update inventory", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const getProductName = (id: string) => products.find((p) => p.id === id)?.name || "—";
   const getStateName = (id: string) => states.find((s) => s.id === id)?.name || "—";
   const getCompanyName = (id: string) => companies.find((c) => c.id === id)?.name || "—";
@@ -104,6 +135,43 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">Edit Inventory</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  value={editQuantity}
+                  onChange={(e) => setEditQuantity(e.target.value)}
+                  min="0"
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={submitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {submitting ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow mb-4 p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
@@ -124,7 +192,7 @@ export default function InventoryPage() {
             <select
               value={filters.stateId}
               onChange={(e) => setFilters({ ...filters, stateId: e.target.value })}
-              className="w-full px-3 text-gray-500 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full text-gray-500 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All States</option>
               {states.map((s) => (
@@ -171,6 +239,7 @@ export default function InventoryPage() {
               <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Delivery Company</th>
               <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Available Stock</th>
               <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Updated</th>
+              <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -187,12 +256,20 @@ export default function InventoryPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2">{formatDate(item.updatedAt)}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="px-2 py-1 text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {inventory.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-4 text-center text-gray-500">
                   No inventory items found.
                 </td>
               </tr>

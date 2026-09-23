@@ -4,6 +4,7 @@ import {
   where,
   getDocs,
   doc,
+  updateDoc,
   runTransaction,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -14,6 +15,7 @@ export interface AddStockData {
   stateId: string;
   deliveryCompanyId: string;
   quantity: number;
+  date: number;
 }
 
 export async function getInventory(): Promise<Inventory[]> {
@@ -91,7 +93,7 @@ export async function addStock(data: AddStockData): Promise<void> {
     );
     const snapshot = await getDocs(q);
 
-    const now = Date.now();
+    const now = data.date || Date.now();
 
     if (snapshot.empty) {
       transaction.set(doc(collection(db, "inventory")), {
@@ -143,6 +145,16 @@ export async function adjustStock(
       quantity: newQty,
       updatedAt: Date.now(),
     });
+  });
+}
+
+export async function updateStock(
+  id: string,
+  quantity: number
+): Promise<void> {
+  await updateDoc(doc(db, "inventory", id), {
+    quantity,
+    updatedAt: Date.now(),
   });
 }
 

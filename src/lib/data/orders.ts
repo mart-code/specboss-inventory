@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   runTransaction,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Order, OrderStatus } from "@/lib/types";
@@ -18,9 +19,9 @@ export interface CreateOrderData {
   quantity: number;
   salePrice: number;
   deliveryCost: number;
-
   status: OrderStatus;
   orderDate?: number;
+  cancellationReason?: string;
 }
 
 export async function generateOrderNumber(): Promise<string> {
@@ -94,7 +95,7 @@ export async function createOrder(data: CreateOrderData): Promise<Order> {
 
   const orderRef = doc(collection(db, "orders"));
 
-  if (data.status === "successful") {
+  if (data.status === "successful" || data.status === "pending") {
     await runTransaction(db, async (transaction) => {
       const inventoryQ = query(
         collection(db, "inventory"),
@@ -151,14 +152,16 @@ async function adjustInventoryForStatusChange(
     );
     const inventorySnap = await getDocs(inventoryQ);
 
-    let quantityAdjust = 0;
+     let quantityAdjust = 0;
 
-    if (fromStatus === "successful") {
-      quantityAdjust += oldQuantity;
-    }
+    const wasReserved = fromStatus === "successful" || fromStatus === "pending";
+    const willBeReserved = toStatus === "successful" || toStatus === "pending";
 
-    if (toStatus === "successful") {
+    if (willBeReserved) {
       quantityAdjust -= newQuantity;
+    }
+    if (wasReserved) {
+      quantityAdjust += oldQuantity;
     }
 
     if (quantityAdjust === 0) return;
@@ -217,6 +220,7 @@ export async function updateOrder(
     updates.subtotal = salePrice * quantity;
     updates.total = salePrice * quantity + deliveryCost;
   }
+  if (data.cancellationReason !== undefined) updates.cancellationReason = data.cancellationReason;
   if (data.status) updates.status = data.status;
 
   const productId = data.productId || existingOrder.productId;
@@ -234,7 +238,11 @@ export async function updateOrder(
   await updateDoc(doc(db, "orders", id), updates);
 }
 
-export async function updateOrderStatus(id: string, newStatus: OrderStatus): Promise<void> {
+export async function updateOrderStatus(
+  id: string,
+  newStatus: OrderStatus,
+  cancellationReason?: string
+): Promise<void> {
   const existingOrder = await getOrder(id);
   if (!existingOrder) {
     throw new Error("Order not found");
@@ -246,10 +254,18 @@ export async function updateOrderStatus(id: string, newStatus: OrderStatus): Pro
     deliveryCompanyId: existingOrder.deliveryCompanyId,
   });
 
-  await updateDoc(doc(db, "orders", id), {
+  const updates: Record<string, unknown> = {
     status: newStatus,
     updatedAt: Date.now(),
-  });
+  };
+
+  if (newStatus === "cancelled") {
+    updates.cancellationReason = cancellationReason ?? existingOrder.cancellationReason ?? "";
+  } else {
+    updates.cancellationReason = deleteField();
+  }
+
+  await updateDoc(doc(db, "orders", id), updates);
 }
 
 export interface OrderFilters {
@@ -260,6 +276,7 @@ export interface OrderFilters {
   status?: OrderStatus;
   dateFrom?: number;
   dateTo?: number;
+  cancellationReason?: string;
 }
 
 export async function searchOrders(filters: OrderFilters): Promise<Order[]> {
@@ -283,6 +300,9 @@ export async function searchOrders(filters: OrderFilters): Promise<Order[]> {
   }
   if (filters.status) {
     constraints.push(where("status", "==", filters.status));
+  }
+  if (filters.cancellationReason) {
+    constraints.push(where("cancellationReason", "==", filters.cancellationReason));
   }
   if (filters.dateFrom !== undefined) {
     constraints.push(where("orderDate", ">=", filters.dateFrom));
@@ -314,8 +334,8 @@ export async function deleteOrder(id: string): Promise<void> {
   const existingOrder = await getOrder(id);
   if (!existingOrder) return;
 
-  if (existingOrder.status === "successful") {
-    await adjustInventoryForStatusChange("successful", "cancelled", existingOrder.quantity, existingOrder.quantity, {
+  if (existingOrder.status === "successful" || existingOrder.status === "pending") {
+    await adjustInventoryForStatusChange(existingOrder.status, "cancelled", existingOrder.quantity, existingOrder.quantity, {
       productId: existingOrder.productId,
       stateId: existingOrder.stateId,
       deliveryCompanyId: existingOrder.deliveryCompanyId,

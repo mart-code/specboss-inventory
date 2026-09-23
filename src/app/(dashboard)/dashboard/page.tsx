@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   await seedStatesIfEmpty();
   const metrics = await getDashboardMetrics();
+  const cancelledOrders = (metrics.recentOrders || []).filter((o) => o.status === "cancelled");
 
   return (
     <div>
@@ -28,6 +29,30 @@ export default async function DashboardPage() {
         currentStock={metrics.currentStock}
         lowStockItems={metrics.lowStockItems}
       />
+
+      {cancelledOrders.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <h2 className="text-lg font-semibold text-red-800 mb-3">Cancelled Orders</h2>
+          <div className="space-y-3">
+            {cancelledOrders.slice(-3).map((order) => (
+              <div key={order.id} className="bg-white border border-red-100 rounded-lg p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium text-gray-900">{order.orderNumber}</p>
+                    <p className="text-sm text-gray-500">{formatDate(order.orderDate)}</p>
+                  </div>
+                  <span className="inline-block px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                    {order.status}
+                  </span>
+                </div>
+                {order.cancellationReason && (
+                  <p className="text-sm text-red-700 mt-2">&ldquo;{order.cancellationReason}&rdquo;</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow">
         <div className="flex items-center justify-between p-4 border-b">

@@ -50,6 +50,7 @@ export interface Order {
   total: number;
   status: OrderStatus;
   orderDate: number;
+  cancellationReason?: string;
   createdAt: number;
   updatedAt: number;
 }
