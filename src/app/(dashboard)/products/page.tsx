@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Product } from "@/lib/types";
-import { getProducts, toggleProductStatus } from "@/lib/data/products";
+import { getProducts, toggleProductStatus, deleteProduct } from "@/lib/data/products";
 import { getInventory } from "@/lib/data/inventory";
 import { ProductForm } from "@/components/product-form";
+import { useToast } from "@/components/ui/toast-context";
 import { LOW_STOCK_THRESHOLD, formatCurrency } from "@/lib/utils";
 
 export default function ProductsPage() {
+  const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -64,6 +66,19 @@ export default function ProductsPage() {
       ));
     } catch (error) {
       console.error("Failed to update status", error);
+    }
+  };
+
+  const handleDelete = async (product: Product) => {
+    const confirmed = window.confirm(`Delete ${product.name}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteProduct(product.id);
+      showToast("Product deleted", "success");
+      loadData();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to delete product", "error");
     }
   };
 
@@ -137,13 +152,19 @@ export default function ProductsPage() {
                   </button>
                   <button
                     onClick={() => handleToggleStatus(product)}
-                    className={`${
+                    className={`mr-2 ${
                       product.isActive
                         ? "text-orange-600 hover:text-orange-800"
                         : "text-green-600 hover:text-green-800"
                     }`}
                   >
                     {product.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(product)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Delete
                   </button>
                 </td>
               </tr>

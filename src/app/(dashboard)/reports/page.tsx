@@ -5,7 +5,14 @@ import { Order } from "@/lib/types";
 import { getOrders } from "@/lib/data/orders";
 import { getStates } from "@/lib/data/states";
 import { getDeliveryCompanies } from "@/lib/data/delivery-companies";
-import { getReportData, getChartData, getSalesByState, getSalesByCompany } from "@/lib/data/reports";
+import {
+  getReportData,
+  getChartData,
+  getSalesByState,
+  getSalesByCompany,
+  getFilteredSuccessfulOrders,
+  ReportFilter,
+} from "@/lib/data/reports";
 import { formatCurrency } from "@/lib/utils";
 import {
   ResponsiveContainer,
@@ -17,12 +24,34 @@ import {
   CartesianGrid,
 } from "recharts";
 
-type Period = "daily" | "weekly" | "monthly" | "yearly";
+type Period = "day" | "month" | "year" | "range";
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatMonthInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+const today = new Date();
 
 export default function ReportsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activePeriod, setActivePeriod] = useState<Period>("daily");
+  const [activePeriod, setActivePeriod] = useState<Period>("day");
+  const [dayFilter, setDayFilter] = useState(formatDateInput(today));
+  const [monthFilter, setMonthFilter] = useState(formatMonthInput(today));
+  const [yearFilter, setYearFilter] = useState(String(today.getFullYear()));
+  const [rangeFrom, setRangeFrom] = useState(formatDateInput(today));
+  const [rangeTo, setRangeTo] = useState(formatDateInput(today));
+  const [stateNames, setStateNames] = useState<Map<string, string>>(new Map());
+  const [companyNames, setCompanyNames] = useState<Map<string, string>>(new Map());
   const [reportData, setReportData] = useState({ revenue: 0, orders: 0, unitsSold: 0 });
   const [chartData, setChartData] = useState<Array<{ date: string; revenue: number }>>([]);
   const [salesByState, setSalesByState] = useState<Array<{ stateName: string; orders: number; unitsSold: number; revenue: number }>>([]);
@@ -38,19 +67,8 @@ export default function ReportsPage() {
       ]);
       setOrders(ordersData);
 
-      const stateNames = new Map(statesData.map((s) => [s.id, s.name]));
-      const companyNames = new Map(companiesData.map((c) => [c.id, c.name]));
-
-      const report = await getReportData(ordersData, "daily");
-      setReportData(report);
-
-      setChartData(getChartData(ordersData, "daily"));
-
-      const stateSales = await getSalesByState(ordersData, stateNames);
-      setSalesByState(stateSales);
-
-      const companySales = await getSalesByCompany(ordersData, companyNames);
-      setSalesByCompany(companySales);
+      setStateNames(new Map(statesData.map((s) => [s.id, s.name])));
+      setCompanyNames(new Map(companiesData.map((c) => [c.id, c.name])));
     } catch (error) {
       console.error("Failed to load reports", error);
     } finally {
@@ -62,18 +80,37 @@ export default function ReportsPage() {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (orders.length > 0) {
-      getReportData(orders, activePeriod).then(setReportData);
-      setChartData(getChartData(orders, activePeriod));
+  const getActiveFilter = (): ReportFilter => {
+    if (activePeriod === "month") {
+      return { type: "month", month: monthFilter };
     }
-  }, [activePeriod, orders]);
+    if (activePeriod === "year") {
+      return { type: "year", year: yearFilter };
+    }
+    if (activePeriod === "range") {
+      return { type: "range", from: rangeFrom, to: rangeTo };
+    }
+    return { type: "day", date: dayFilter };
+  };
+
+  useEffect(() => {
+    const refreshReport = async () => {
+      const filter = getActiveFilter();
+      const filteredOrders = getFilteredSuccessfulOrders(orders, filter);
+      setReportData(await getReportData(orders, filter));
+      setChartData(getChartData(orders, filter));
+      setSalesByState(await getSalesByState(filteredOrders, stateNames));
+      setSalesByCompany(await getSalesByCompany(filteredOrders, companyNames));
+    };
+
+    refreshReport();
+  }, [activePeriod, dayFilter, monthFilter, yearFilter, rangeFrom, rangeTo, orders, stateNames, companyNames]);
 
   const periods: { value: Period; label: string }[] = [
-    { value: "daily", label: "Daily" },
-    { value: "weekly", label: "Weekly" },
-    { value: "monthly", label: "Monthly" },
-    { value: "yearly", label: "Yearly" },
+    { value: "day", label: "Day" },
+    { value: "month", label: "Month" },
+    { value: "year", label: "Year" },
+    { value: "range", label: "Range" },
   ];
 
   if (loading) {
@@ -98,6 +135,68 @@ export default function ReportsPage() {
             {p.label}
           </button>
         ))}
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {activePeriod === "day" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Specific Day</label>
+              <input
+                type="date"
+                value={dayFilter}
+                onChange={(e) => setDayFilter(e.target.value)}
+                className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+          {activePeriod === "month" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Specific Month</label>
+              <input
+                type="month"
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+          {activePeriod === "year" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Specific Year</label>
+              <input
+                type="number"
+                min="2000"
+                max="2100"
+                value={yearFilter}
+                onChange={(e) => setYearFilter(e.target.value)}
+                className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+          {activePeriod === "range" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+                <input
+                  type="date"
+                  value={rangeFrom}
+                  onChange={(e) => setRangeFrom(e.target.value)}
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <input
+                  type="date"
+                  value={rangeTo}
+                  onChange={(e) => setRangeTo(e.target.value)}
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

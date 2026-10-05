@@ -41,9 +41,9 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
     setLoading(true);
     try {
       const [productsData, statesData, companiesData] = await Promise.all([
-        getProducts(),
+        getProducts(false),
         getStates(),
-        getDeliveryCompanies(),
+        getDeliveryCompanies(false),
       ]);
       setProducts(productsData);
       setStates(statesData);
@@ -80,6 +80,16 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
   const orderDateNum = new Date(orderDate).getTime();
   const subtotal = salePriceNum * quantityNum;
   const total = subtotal - deliveryCostNum;
+  const selectedSameLocationAsOrder =
+    !!order &&
+    selectedProduct === order.productId &&
+    selectedState === order.stateId &&
+    selectedCompany === order.deliveryCompanyId;
+  const orderAlreadyReserved = order?.status === "successful" || order?.status === "pending";
+  const effectiveAvailableStock =
+    availableStock !== null && selectedSameLocationAsOrder && orderAlreadyReserved
+      ? availableStock + order.quantity
+      : availableStock;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,8 +101,8 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
       showToast("Quantity must be greater than 0", "error");
       return;
     }
-    if ((status === "successful" || status === "pending") && availableStock !== null && quantityNum > availableStock) {
-      showToast(`Cannot create order: only ${availableStock} in stock`, "error");
+    if ((status === "successful" || status === "pending") && effectiveAvailableStock !== null && quantityNum > effectiveAvailableStock) {
+      showToast(`Cannot save order: only ${effectiveAvailableStock} in stock`, "error");
       return;
     }
 
@@ -166,8 +176,10 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
             className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select State</option>
-            {states.filter((s) => s.isActive).map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {states.map((s) => (
+              <option key={s.id} value={s.id} disabled={!s.isActive}>
+                {s.name} {s.isActive ? "" : "(Inactive)"}
+              </option>
             ))}
           </select>
         </div>
@@ -181,8 +193,10 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
             className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select Delivery Company</option>
-            {companies.filter((c) => c.isActive).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id} disabled={!c.isActive}>
+                {c.name} {c.isActive ? "" : "(Inactive)"}
+              </option>
             ))}
           </select>
         </div>
@@ -198,7 +212,7 @@ export function OrderForm({ order, onSuccess, onCancel }: OrderFormProps) {
             className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {availableStock !== null && availableStock !== undefined && (
-            <p className="text-xs text-gray-600 mt-1">Available Stock: {availableStock}</p>
+            <p className="text-xs text-gray-600 mt-1">Available Stock: {effectiveAvailableStock}</p>
           )}
         </div>
 

@@ -7,6 +7,7 @@ import {
   createDeliveryCompany,
   updateDeliveryCompany,
   toggleDeliveryCompanyStatus,
+  deleteDeliveryCompany,
 } from "@/lib/data/delivery-companies";
 import { useToast } from "@/components/ui/toast-context";
 import { formatDate } from "@/lib/utils";
@@ -62,6 +63,19 @@ export default function DeliveryCompaniesPage() {
       ));
     } catch (error) {
       console.error("Failed to update status", error);
+    }
+  };
+
+  const handleDelete = async (company: DeliveryCompany) => {
+    const confirmed = window.confirm(`Delete ${company.name}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteDeliveryCompany(company.id);
+      showToast("Delivery company deleted", "success");
+      loadCompanies();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to delete delivery company", "error");
     }
   };
 
@@ -146,13 +160,19 @@ export default function DeliveryCompaniesPage() {
                   </button>
                   <button
                     onClick={() => handleToggleStatus(company)}
-                    className={`${
+                    className={`mr-2 ${
                       company.isActive
                         ? "text-orange-600 hover:text-orange-800"
                         : "text-green-600 hover:text-green-800"
                     }`}
                   >
                     {company.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(company)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Delete
                   </button>
                 </td>
               </tr>

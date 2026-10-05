@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   where,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { DeliveryCompany } from "@/lib/types";
@@ -53,4 +54,8 @@ export async function updateDeliveryCompany(id: string, data: { name?: string; i
 
 export async function toggleDeliveryCompanyStatus(id: string, isActive: boolean): Promise<void> {
   await updateDoc(doc(db, "deliveryCompanies", id), { isActive });
+}
+
+export async function deleteDeliveryCompany(id: string): Promise<void> {
+  await deleteDoc(doc(db, "deliveryCompanies", id));
 }

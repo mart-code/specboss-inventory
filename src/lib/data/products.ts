@@ -1,4 +1,4 @@
-import { collection, query, where, addDoc, updateDoc, getDoc, getDocs, doc } from "firebase/firestore";
+import { collection, query, where, addDoc, updateDoc, getDoc, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Product, Inventory } from "@/lib/types";
 
@@ -50,6 +50,10 @@ export async function toggleProductStatus(id: string, isActive: boolean): Promis
     isActive,
     updatedAt: Date.now(),
   });
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  await deleteDoc(doc(db, "products", id));
 }
 
 export async function getProductInventory(productId: string): Promise<Inventory[]> {

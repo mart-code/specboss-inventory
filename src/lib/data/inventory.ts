@@ -6,6 +6,7 @@ import {
   doc,
   updateDoc,
   runTransaction,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Inventory } from "@/lib/types";
@@ -156,6 +157,33 @@ export async function updateStock(
     quantity,
     updatedAt: Date.now(),
   });
+}
+
+export async function updateInventoryItem(
+  id: string,
+  data: {
+    productId: string;
+    stateId: string;
+    deliveryCompanyId: string;
+    quantity: number;
+  }
+): Promise<void> {
+  const existing = await getInventoryItem(data.productId, data.stateId, data.deliveryCompanyId);
+  if (existing && existing.id !== id) {
+    throw new Error("Inventory already exists for this product, state, and delivery company");
+  }
+
+  await updateDoc(doc(db, "inventory", id), {
+    productId: data.productId,
+    stateId: data.stateId,
+    deliveryCompanyId: data.deliveryCompanyId,
+    quantity: data.quantity,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function deleteInventoryItem(id: string): Promise<void> {
+  await deleteDoc(doc(db, "inventory", id));
 }
 
 export async function getAvailableStock(

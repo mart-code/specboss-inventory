@@ -1,4 +1,4 @@
-import { collection, query, getDocs, setDoc, getDoc, doc, where } from "firebase/firestore";
+import { collection, query, getDocs, setDoc, getDoc, doc, where, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { State } from "@/lib/types";
 
@@ -54,4 +54,12 @@ export async function getStateByName(name: string): Promise<State | null> {
     id: docSnap.id,
     ...(docSnap.data() as Omit<State, "id">),
   };
+}
+
+export async function updateState(id: string, data: { name?: string; isActive?: boolean }): Promise<void> {
+  await updateDoc(doc(db, "states", id), data);
+}
+
+export async function deleteState(id: string): Promise<void> {
+  await deleteDoc(doc(db, "states", id));
 }

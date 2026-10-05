@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { Order, Product, State, DeliveryCompany } from "@/lib/types";
-import { getOrders } from "@/lib/data/orders";
+import { deleteOrder, getOrders } from "@/lib/data/orders";
 import { getProducts } from "@/lib/data/products";
 import { getStates } from "@/lib/data/states";
 import { getDeliveryCompanies } from "@/lib/data/delivery-companies";
 import { OrderForm } from "@/components/order-form";
+import { useToast } from "@/components/ui/toast-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 
 export default function OrdersPage() {
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [states, setStates] = useState<State[]>([]);
@@ -55,6 +57,19 @@ export default function OrdersPage() {
   const getProductName = (id: string) => products.find((p) => p.id === id)?.name || "—";
   const getStateName = (id: string) => states.find((s) => s.id === id)?.name || "—";
   const getCompanyName = (id: string) => companies.find((c) => c.id === id)?.name || "—";
+
+  const handleDelete = async (order: Order) => {
+    const confirmed = window.confirm(`Delete order ${order.orderNumber}? Reserved stock will be restored.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteOrder(order.id);
+      showToast("Order deleted", "success");
+      loadData();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to delete order", "error");
+    }
+  };
 
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading...</div>;
@@ -153,10 +168,22 @@ export default function OrdersPage() {
                 <td className="px-4 py-2 text-right">
                   <Link
                     href={`/orders/${order.id}`}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="text-blue-600 hover:text-blue-800 mr-2"
                   >
                     View
                   </Link>
+                  <button
+                    onClick={() => { setEditingOrder(order); setShowForm(true); }}
+                    className="text-blue-600 hover:text-blue-800 mr-2"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(order)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             ))}

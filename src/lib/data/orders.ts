@@ -8,6 +8,9 @@ import {
   getDoc,
   runTransaction,
   deleteField,
+  deleteDoc,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Order, OrderStatus } from "@/lib/types";
@@ -185,6 +188,25 @@ async function adjustInventoryForStatusChange(
   });
 }
 
+function isReservedStatus(status: OrderStatus): boolean {
+  return status === "successful" || status === "pending";
+}
+
+async function findInventoryDoc(location: {
+  productId: string;
+  stateId: string;
+  deliveryCompanyId: string;
+}): Promise<QueryDocumentSnapshot<DocumentData> | null> {
+  const inventoryQ = query(
+    collection(db, "inventory"),
+    where("productId", "==", location.productId),
+    where("stateId", "==", location.stateId),
+    where("deliveryCompanyId", "==", location.deliveryCompanyId)
+  );
+  const inventorySnap = await getDocs(inventoryQ);
+  return inventorySnap.empty ? null : inventorySnap.docs[0];
+}
+
 export async function updateOrder(
   id: string,
   data: Partial<CreateOrderData>
@@ -198,6 +220,20 @@ export async function updateOrder(
   const newStatus = data.status ?? oldStatus;
   const oldQuantity = existingOrder.quantity;
   const newQuantity = data.quantity ?? existingOrder.quantity;
+  const oldLocation = {
+    productId: existingOrder.productId,
+    stateId: existingOrder.stateId,
+    deliveryCompanyId: existingOrder.deliveryCompanyId,
+  };
+  const newLocation = {
+    productId: data.productId || existingOrder.productId,
+    stateId: data.stateId || existingOrder.stateId,
+    deliveryCompanyId: data.deliveryCompanyId || existingOrder.deliveryCompanyId,
+  };
+  const locationChanged =
+    oldLocation.productId !== newLocation.productId ||
+    oldLocation.stateId !== newLocation.stateId ||
+    oldLocation.deliveryCompanyId !== newLocation.deliveryCompanyId;
   const now = Date.now();
 
   const updates: Record<string, unknown> = {
@@ -218,21 +254,55 @@ export async function updateOrder(
     const quantity = data.quantity ?? existingOrder.quantity;
     const deliveryCost = data.deliveryCost ?? existingOrder.deliveryCost;
     updates.subtotal = salePrice * quantity;
-    updates.total = salePrice * quantity + deliveryCost;
+    updates.total = salePrice * quantity - deliveryCost;
   }
-  if (data.cancellationReason !== undefined) updates.cancellationReason = data.cancellationReason;
   if (data.status) updates.status = data.status;
+  if (newStatus === "cancelled") {
+    updates.cancellationReason = data.cancellationReason ?? existingOrder.cancellationReason ?? "";
+  } else {
+    updates.cancellationReason = deleteField();
+  }
 
-  const productId = data.productId || existingOrder.productId;
-  const stateId = data.stateId || existingOrder.stateId;
-  const deliveryCompanyId = data.deliveryCompanyId || existingOrder.deliveryCompanyId;
+  if (oldStatus !== newStatus || oldQuantity !== newQuantity || locationChanged) {
+    const oldInventoryDoc = isReservedStatus(oldStatus)
+      ? await findInventoryDoc(oldLocation)
+      : null;
+    const newInventoryDoc = isReservedStatus(newStatus)
+      ? await findInventoryDoc(newLocation)
+      : null;
 
-  if (oldStatus !== newStatus) {
-    await adjustInventoryForStatusChange(oldStatus, newStatus, oldQuantity, newQuantity, {
-      productId,
-      stateId,
-      deliveryCompanyId,
+    if (isReservedStatus(newStatus) && !newInventoryDoc) {
+      throw new Error("No inventory found for this product/location combination");
+    }
+
+    await runTransaction(db, async (transaction) => {
+      if (oldInventoryDoc) {
+        const currentQty = (oldInventoryDoc.data() as { quantity: number }).quantity;
+        transaction.update(doc(db, "inventory", oldInventoryDoc.id), {
+          quantity: currentQty + oldQuantity,
+          updatedAt: now,
+        });
+      }
+
+      if (newInventoryDoc) {
+        const currentQty = (newInventoryDoc.data() as { quantity: number }).quantity;
+        const restoredOldQty =
+          oldInventoryDoc && oldInventoryDoc.id === newInventoryDoc.id ? oldQuantity : 0;
+        const newQty = currentQty + restoredOldQty - newQuantity;
+
+        if (newQty < 0) {
+          throw new Error("Insufficient stock");
+        }
+
+        transaction.update(doc(db, "inventory", newInventoryDoc.id), {
+          quantity: newQty,
+          updatedAt: now,
+        });
+      }
+
+      transaction.update(doc(db, "orders", id), updates);
     });
+    return;
   }
 
   await updateDoc(doc(db, "orders", id), updates);
@@ -334,7 +404,7 @@ export async function deleteOrder(id: string): Promise<void> {
   const existingOrder = await getOrder(id);
   if (!existingOrder) return;
 
-  if (existingOrder.status === "successful" || existingOrder.status === "pending") {
+  if (isReservedStatus(existingOrder.status)) {
     await adjustInventoryForStatusChange(existingOrder.status, "cancelled", existingOrder.quantity, existingOrder.quantity, {
       productId: existingOrder.productId,
       stateId: existingOrder.stateId,
@@ -342,8 +412,5 @@ export async function deleteOrder(id: string): Promise<void> {
     });
   }
 
-  await updateDoc(doc(db, "orders", id), {
-    status: "cancelled",
-    updatedAt: Date.now(),
-  });
+  await deleteDoc(doc(db, "orders", id));
 }

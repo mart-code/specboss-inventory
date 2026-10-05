@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Inventory, Product, State, DeliveryCompany } from "@/lib/types";
-import { getInventory, getInventoryWithFilters, updateStock } from "@/lib/data/inventory";
+import { getInventory, getInventoryWithFilters, updateInventoryItem, deleteInventoryItem } from "@/lib/data/inventory";
 import { getProducts } from "@/lib/data/products";
 import { getStates } from "@/lib/data/states";
 import { getDeliveryCompanies } from "@/lib/data/delivery-companies";
@@ -20,7 +20,12 @@ export default function InventoryPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showAddStock, setShowAddStock] = useState(false);
   const [editingItem, setEditingItem] = useState<Inventory | null>(null);
-  const [editQuantity, setEditQuantity] = useState("");
+  const [editForm, setEditForm] = useState({
+    productId: "",
+    stateId: "",
+    deliveryCompanyId: "",
+    quantity: "",
+  });
   const [filters, setFilters] = useState<{
     productId: string;
     stateId: string;
@@ -32,9 +37,9 @@ export default function InventoryPage() {
     try {
       const [inventoryData, productsData, statesData, companiesData] = await Promise.all([
         getInventory(),
-        getProducts(),
+        getProducts(false),
         getStates(),
-        getDeliveryCompanies(),
+        getDeliveryCompanies(false),
       ]);
       setInventory(inventoryData);
       setProducts(productsData);
@@ -79,12 +84,21 @@ export default function InventoryPage() {
 
   const handleEdit = (item: Inventory) => {
     setEditingItem(item);
-    setEditQuantity(String(item.quantity));
+    setEditForm({
+      productId: item.productId,
+      stateId: item.stateId,
+      deliveryCompanyId: item.deliveryCompanyId,
+      quantity: String(item.quantity),
+    });
   };
 
   const handleSaveEdit = async () => {
     if (!editingItem) return;
-    const qty = parseInt(editQuantity, 10);
+    const qty = parseInt(editForm.quantity, 10);
+    if (!editForm.productId || !editForm.stateId || !editForm.deliveryCompanyId) {
+      showToast("Please select product, state, and delivery company", "error");
+      return;
+    }
     if (isNaN(qty) || qty < 0) {
       showToast("Quantity must be 0 or greater", "error");
       return;
@@ -92,7 +106,12 @@ export default function InventoryPage() {
 
     setSubmitting(true);
     try {
-      await updateStock(editingItem.id, qty);
+      await updateInventoryItem(editingItem.id, {
+        productId: editForm.productId,
+        stateId: editForm.stateId,
+        deliveryCompanyId: editForm.deliveryCompanyId,
+        quantity: qty,
+      });
       showToast("Inventory updated successfully", "success");
       setEditingItem(null);
       loadData();
@@ -100,6 +119,21 @@ export default function InventoryPage() {
       showToast(error instanceof Error ? error.message : "Failed to update inventory", "error");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (item: Inventory) => {
+    const confirmed = window.confirm(
+      `Delete inventory for ${getProductName(item.productId)} in ${getStateName(item.stateId)}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteInventoryItem(item.id);
+      showToast("Inventory deleted", "success");
+      loadData();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to delete inventory", "error");
     }
   };
 
@@ -141,11 +175,53 @@ export default function InventoryPage() {
             <h2 className="text-lg font-semibold text-gray-700 mb-4">Edit Inventory</h2>
             <div className="space-y-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+                <select
+                  value={editForm.productId}
+                  onChange={(e) => setEditForm({ ...editForm, productId: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Product</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                <select
+                  value={editForm.stateId}
+                  onChange={(e) => setEditForm({ ...editForm, stateId: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select State</option>
+                  {states.map((state) => (
+                    <option key={state.id} value={state.id}>{state.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Company</label>
+                <select
+                  value={editForm.deliveryCompanyId}
+                  onChange={(e) => setEditForm({ ...editForm, deliveryCompanyId: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Delivery Company</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                 <input
                   type="number"
-                  value={editQuantity}
-                  onChange={(e) => setEditQuantity(e.target.value)}
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
                   min="0"
                   className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -257,13 +333,19 @@ export default function InventoryPage() {
                   </td>
                   <td className="px-4 py-2">{formatDate(item.updatedAt)}</td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => handleEdit(item)}
+                  <button
+                    onClick={() => handleEdit(item)}
                       className="px-2 py-1 text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Edit
-                    </button>
-                  </td>
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="px-2 py-1 text-sm text-red-600 hover:text-red-800"
+                  >
+                    Delete
+                  </button>
+                </td>
                 </tr>
               );
             })}

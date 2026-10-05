@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Order, Product, State, DeliveryCompany, OrderStatus } from "@/lib/types";
-import { getOrder, updateOrderStatus } from "@/lib/data/orders";
+import { deleteOrder, getOrder, updateOrderStatus } from "@/lib/data/orders";
 import { getProduct } from "@/lib/data/products";
 import { getState } from "@/lib/data/states";
 import { getDeliveryCompany } from "@/lib/data/delivery-companies";
+import { OrderForm } from "@/components/order-form";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast-context";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 export default function OrderDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const orderId = params?.id as string;
   const { showToast } = useToast();
@@ -24,35 +26,36 @@ export default function OrderDetailPage() {
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus>("pending");
   const [cancelReason, setCancelReason] = useState("");
   const [statusChanging, setStatusChanging] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId) return;
+    setLoading(true);
+    try {
+      const orderData = await getOrder(orderId);
+      if (!orderData) return;
+      setOrder(orderData);
+      setSelectedStatus(orderData.status);
+      setCancelReason(orderData.cancellationReason || "");
+
+      const [productData, stateData, companyData] = await Promise.all([
+        getProduct(orderData.productId),
+        getState(orderData.stateId),
+        getDeliveryCompany(orderData.deliveryCompanyId),
+      ]);
+      setProduct(productData);
+      setState(stateData);
+      setCompany(companyData);
+    } catch (error) {
+      console.error("Failed to load order", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId]);
 
   useEffect(() => {
-    const loadOrder = async () => {
-      if (!orderId) return;
-      setLoading(true);
-      try {
-        const orderData = await getOrder(orderId);
-        if (!orderData) return;
-        setOrder(orderData);
-        setSelectedStatus(orderData.status);
-        setCancelReason(orderData.cancellationReason || "");
-
-        const [productData, stateData, companyData] = await Promise.all([
-          getProduct(orderData.productId),
-          getState(orderData.stateId),
-          getDeliveryCompany(orderData.deliveryCompanyId),
-        ]);
-        setProduct(productData);
-        setState(stateData);
-        setCompany(companyData);
-      } catch (error) {
-        console.error("Failed to load order", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadOrder();
-  }, [orderId]);
+  }, [loadOrder]);
 
   const handleSaveStatus = async () => {
     if (!order || order.status === selectedStatus) return;
@@ -93,6 +96,20 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!order) return;
+    const confirmed = window.confirm(`Delete order ${order.orderNumber}? Reserved stock will be restored.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteOrder(order.id);
+      showToast("Order deleted", "success");
+      router.push("/orders");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Failed to delete order", "error");
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading...</div>;
   }
@@ -114,16 +131,46 @@ export default function OrderDetailPage() {
           <h1 className="text-2xl font-bold text-gray-900">
             Order {order.orderNumber}
           </h1>
-          <span className={`inline-block px-3 py-1 text-sm rounded-full ${
-            order.status === "successful"
-              ? "bg-green-100 text-green-800"
-              : order.status === "pending"
-              ? "bg-yellow-100 text-yellow-800"
-              : "bg-red-100 text-red-800"
-          }`}>
-            {order.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEditForm(true)}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              Delete
+            </button>
+            <span className={`inline-block px-3 py-1 text-sm rounded-full ${
+              order.status === "successful"
+                ? "bg-green-100 text-green-800"
+                : order.status === "pending"
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-red-100 text-red-800"
+            }`}>
+              {order.status}
+            </span>
+          </div>
         </div>
+
+        {showEditForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-lg max-w-4xl w-full p-6 my-8">
+              <h2 className="text-lg font-semibold mb-4 text-gray-700">Edit Order</h2>
+              <OrderForm
+                order={order}
+                onSuccess={() => {
+                  setShowEditForm(false);
+                  loadOrder();
+                }}
+                onCancel={() => setShowEditForm(false)}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>

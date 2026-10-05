@@ -1,5 +1,5 @@
 import { Order } from "@/lib/types";
-import { startOfDay, startOfWeek, startOfMonth, startOfYear } from "@/lib/utils";
+import { startOfDay, startOfMonth, startOfYear } from "@/lib/utils";
 
 export interface ReportData {
   revenue: number;
@@ -12,27 +12,57 @@ export interface ChartDataPoint {
   revenue: number;
 }
 
-export async function getReportData(orders: Order[], period: "daily" | "weekly" | "monthly" | "yearly"): Promise<ReportData> {
-  const now = new Date();
-  let startDate: Date;
+export type ReportFilter =
+  | { type: "day"; date: string }
+  | { type: "month"; month: string }
+  | { type: "year"; year: string }
+  | { type: "range"; from: string; to: string };
 
-  switch (period) {
-    case "daily":
-      startDate = startOfDay(now);
-      break;
-    case "weekly":
-      startDate = startOfWeek(now);
-      break;
-    case "monthly":
-      startDate = startOfMonth(now);
-      break;
-    case "yearly":
-      startDate = startOfYear(now);
-      break;
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+export function getDateRangeForFilter(filter: ReportFilter): { start: number; end: number } {
+  if (filter.type === "day") {
+    const date = parseLocalDate(filter.date);
+    return { start: startOfDay(date).getTime(), end: endOfDay(date).getTime() };
   }
 
-  const start = startDate.getTime();
-  const successful = orders.filter((o) => o.status === "successful" && o.orderDate >= start);
+  if (filter.type === "month") {
+    const [year, month] = filter.month.split("-").map(Number);
+    const start = startOfMonth(new Date(year, month - 1, 1));
+    const end = endOfDay(new Date(year, month, 0));
+    return { start: start.getTime(), end: end.getTime() };
+  }
+
+  if (filter.type === "year") {
+    const year = Number(filter.year || new Date().getFullYear());
+    const start = startOfYear(new Date(year, 0, 1));
+    const end = endOfDay(new Date(year, 11, 31));
+    return { start: start.getTime(), end: end.getTime() };
+  }
+
+  const from = parseLocalDate(filter.from);
+  const to = parseLocalDate(filter.to);
+  const startDate = from <= to ? from : to;
+  const endDate = from <= to ? to : from;
+  return { start: startOfDay(startDate).getTime(), end: endOfDay(endDate).getTime() };
+}
+
+export function getFilteredSuccessfulOrders(orders: Order[], filter: ReportFilter): Order[] {
+  const { start, end } = getDateRangeForFilter(filter);
+  return orders.filter((o) => o.status === "successful" && o.orderDate >= start && o.orderDate <= end);
+}
+
+export async function getReportData(orders: Order[], filter: ReportFilter): Promise<ReportData> {
+  const successful = getFilteredSuccessfulOrders(orders, filter);
 
   return {
     revenue: successful.reduce((sum, o) => sum + o.total, 0),
@@ -41,28 +71,8 @@ export async function getReportData(orders: Order[], period: "daily" | "weekly" 
   };
 }
 
-export function getChartData(orders: Order[], period: "daily" | "weekly" | "monthly" | "yearly"): ChartDataPoint[] {
-  const now = new Date();
-  let startDate: Date;
-
-  switch (period) {
-    case "daily":
-      startDate = startOfDay(now);
-      break;
-    case "weekly":
-      startDate = startOfWeek(now);
-      break;
-    case "monthly":
-      startDate = startOfMonth(now);
-      break;
-    case "yearly":
-      startDate = startOfYear(now);
-      break;
-  }
-
-  const start = startDate.getTime();
-  const successful = orders.filter((o) => o.status === "successful" && o.orderDate >= start);
-
+export function getChartData(orders: Order[], filter: ReportFilter): ChartDataPoint[] {
+  const successful = getFilteredSuccessfulOrders(orders, filter);
   const dailyMap = new Map<string, number>();
 
   successful.forEach((order) => {
