@@ -9,6 +9,7 @@ export const formatCurrency = (amount: number): string => {
 
 export const formatDate = (timestamp: number): string => {
   return new Date(timestamp).toLocaleDateString("en-NG", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
