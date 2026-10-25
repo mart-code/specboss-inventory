@@ -1,16 +1,79 @@
 import { getDashboardMetrics } from "@/lib/data/dashboard";
+import { getProducts } from "@/lib/data/products";
+import { getOrders } from "@/lib/data/orders";
+import { getInventory } from "@/lib/data/inventory";
 import { seedStatesIfEmpty } from "@/lib/data/states";
 import { RevenueCards } from "@/components/revenue-cards";
 import { StatCards } from "@/components/stat-cards";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, LOW_STOCK_THRESHOLD, startOfDay, startOfWeek, startOfMonth, startOfYear } from "@/lib/utils";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   await seedStatesIfEmpty();
-  const metrics = await getDashboardMetrics();
+  const [metrics, products, orders, inventory] = await Promise.all([
+    getDashboardMetrics(),
+    getProducts(false),
+    getOrders(),
+    getInventory(),
+  ]);
+  const productMap = Object.fromEntries(products.map((p) => [p.id, p.name]));
   const cancelledOrders = (metrics.recentOrders || []).filter((o) => o.status === "cancelled");
+
+  const invByProduct: Record<string, number> = {};
+  for (const i of inventory) {
+    invByProduct[i.productId] = (invByProduct[i.productId] || 0) + i.quantity;
+  }
+  const ordersByProduct: Record<string, number> = {};
+  const unitsByProduct: Record<string, number> = {};
+  const revenueByProduct: Record<string, number> = {};
+  for (const o of orders) {
+    ordersByProduct[o.productId] = (ordersByProduct[o.productId] || 0) + 1;
+    if (o.status === "successful") {
+      unitsByProduct[o.productId] = (unitsByProduct[o.productId] || 0) + o.quantity;
+      revenueByProduct[o.productId] = (revenueByProduct[o.productId] || 0) + o.total;
+    }
+  }
+
+  const toBreakdown = (rec: Record<string, number>) =>
+    products.map((p) => ({ name: p.name, value: rec[p.id] || 0 }));
+
+  const statBreakdowns = {
+    totalOrders: toBreakdown(ordersByProduct),
+    unitsSold: toBreakdown(unitsByProduct),
+    currentStock: toBreakdown(invByProduct),
+    lowStockItems: products.map((p) => ({ name: p.name, value: inventory.filter((i) => i.productId === p.id && i.quantity <= LOW_STOCK_THRESHOLD).length })),
+  };
+
+  const now = new Date();
+  // import time helpers? use utils
+  const todayStart = startOfDay(now).getTime();
+  const weekStart = startOfWeek(now).getTime();
+  const monthStart = startOfMonth(now).getTime();
+  const yearStart = startOfYear(now).getTime();
+
+  const revenueByPeriod: Record<string, Record<string, number>> = {
+    today: {},
+    week: {},
+    month: {},
+    year: {},
+  };
+  for (const o of orders) {
+    if (o.status !== "successful") continue;
+    const amt = o.total;
+    if (o.orderDate >= todayStart) revenueByPeriod.today[o.productId] = (revenueByPeriod.today[o.productId] || 0) + amt;
+    if (o.orderDate >= weekStart) revenueByPeriod.week[o.productId] = (revenueByPeriod.week[o.productId] || 0) + amt;
+    if (o.orderDate >= monthStart) revenueByPeriod.month[o.productId] = (revenueByPeriod.month[o.productId] || 0) + amt;
+    if (o.orderDate >= yearStart) revenueByPeriod.year[o.productId] = (revenueByPeriod.year[o.productId] || 0) + amt;
+  }
+
+  const revenueBreakdowns = {
+    todayRevenue: toBreakdown(revenueByPeriod.today),
+    weekRevenue: toBreakdown(revenueByPeriod.week),
+    monthRevenue: toBreakdown(revenueByPeriod.month),
+    yearRevenue: toBreakdown(revenueByPeriod.year),
+  };
 
   return (
     <div>
@@ -21,6 +84,7 @@ export default async function DashboardPage() {
         weekRevenue={metrics.weekRevenue}
         monthRevenue={metrics.monthRevenue}
         yearRevenue={metrics.yearRevenue}
+        breakdowns={revenueBreakdowns}
       />
 
       <StatCards
@@ -28,6 +92,7 @@ export default async function DashboardPage() {
         unitsSold={metrics.unitsSold}
         currentStock={metrics.currentStock}
         lowStockItems={metrics.lowStockItems}
+        breakdowns={statBreakdowns}
       />
 
       {cancelledOrders.length > 0 && (
@@ -66,6 +131,7 @@ export default async function DashboardPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Order #</th>
+                <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Product</th>
                 <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Amount</th>
                 <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">Date</th>
@@ -75,6 +141,7 @@ export default async function DashboardPage() {
               {metrics.recentOrders.map((order) => (
                 <tr key={order.id} className="border-t text-gray-700">
                   <td className="px-4 py-2">{order.orderNumber}</td>
+                  <td className="px-4 py-2">{productMap[order.productId] || order.productId}</td>
                   <td className="px-4 py-2">{formatCurrency(order.total)}</td>
                   <td className="px-4 py-2">
                     <span
